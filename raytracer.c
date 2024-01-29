@@ -38,10 +38,14 @@ typedef struct {
     vec3 position;
     vec3 color;
     vec3 emissionColor;
+    vec3 specularColor;
     float radius;
     float emissionStrength;
+    float smoothness;
+    float specularProbability;
 } Sphere;
 Sphere spheres[3];
+Sphere startSpheres[3];
 
 void mul_vec3_mat3(vec3 vector, mat3 matrix, vec3 dest) {
     dest[0] = (matrix[0][0] * vector[0]) + (matrix[0][1] * vector[1]) + (matrix[0][2] * vector[2]);
@@ -64,6 +68,12 @@ void normalize(vec3 vector) {
 
 float distance(vec3 point1, vec3 point2) {
     return sqrtf((point1[0]-point2[0])*(point1[0]-point2[0]) + (point1[1]-point2[1])*(point1[1]-point2[1]) + (point1[2]-point2[2])*(point1[2]-point2[2]));
+}
+
+void lerp(vec3 a, vec3 b, vec3 result, float t) {
+    result[0] = a[0] + (b[0]-a[0])*t;
+    result[1] = a[1] + (b[1]-a[1])*t;
+    result[2] = a[2] + (b[2]-a[2])*t;
 }
 
 void generateRandomPointOnHemisphere(vec3 point, vec3 normal) {
@@ -162,10 +172,18 @@ void trace(Ray ray, vec3 color) {
                 memcpy(distanceComparator, ray.position, sizeof(vec3));
                 vec3 randomDirection;
                 generateRandomPointOnHemisphere(randomDirection, normal);
-                ray.direction[0] = normal[0] + randomDirection[0];
-                ray.direction[1] = normal[1] + randomDirection[1];
-                ray.direction[2] = normal[2] + randomDirection[2];
-                normalize(ray.direction);
+                vec3 diffuseDirection;
+                diffuseDirection[0] = normal[0] + randomDirection[0];
+                diffuseDirection[1] = normal[1] + randomDirection[1];
+                diffuseDirection[2] = normal[2] + randomDirection[2];
+                normalize(diffuseDirection);
+                vec3 specularDirection;
+                float dotInNormal = ray.direction[0] * normal[0] + ray.direction[1] * normal[1] + ray.direction[2] * normal[2];
+                specularDirection[0] = ray.direction[0] - 2*dotInNormal*normal[0];
+                specularDirection[1] = ray.direction[1] - 2*dotInNormal*normal[1];
+                specularDirection[2] = ray.direction[2] - 2*dotInNormal*normal[2];
+                float isSpecular = spheres[i].specularProbability >= ((float)rand() / RAND_MAX);
+                lerp(diffuseDirection, specularDirection, ray.direction, spheres[i].smoothness * isSpecular);
                 vec3 emittedLight;
                 emittedLight[0] = spheres[i].emissionColor[0] * spheres[i].emissionStrength;
                 emittedLight[1] = spheres[i].emissionColor[1] * spheres[i].emissionStrength;
@@ -173,9 +191,11 @@ void trace(Ray ray, vec3 color) {
                 incomingLight[0] += emittedLight[0] * rayColor[0];
                 incomingLight[1] += emittedLight[1] * rayColor[1];
                 incomingLight[2] += emittedLight[2] * rayColor[2];
-                rayColor[0] *= spheres[i].color[0];
-                rayColor[1] *= spheres[i].color[1];
-                rayColor[2] *= spheres[i].color[2];
+                vec3 newColor;
+                lerp(spheres[i].color, spheres[i].specularColor, newColor, isSpecular);
+                rayColor[0] *= newColor[0];
+                rayColor[1] *= newColor[1];
+                rayColor[2] *= newColor[2];
                 hit = 1;
                 break;
             }
@@ -195,40 +215,46 @@ XEvent eventBuffer[100];
 int main() {
     initWindow(640, 480, "Raytracer");
 
-    camera.position[0] = 5.028200;
+    camera.position[0] = 7.329734;
     camera.position[1] = 0.000000;
-    camera.position[2] = 3.897624;
+    camera.position[2] = 2.851753;
     camera.rotation[0] = -0.100000; 
-    camera.rotation[1] = 1.341594;
+    camera.rotation[1] = 1.241594;
     camera.rotation[2] = 0.000000;
     float focalLength = 1;
-    spheres[0].position[0] = 0;
-    spheres[0].position[1] = 0;
-    spheres[0].position[2] = 400;
-    spheres[0].color[0] = 0;
-    spheres[0].color[1] = 0;
-    spheres[0].color[2] = 0;
-    spheres[0].emissionColor[0] = 1;
-    spheres[0].emissionColor[1] = 1;
-    spheres[0].emissionColor[2] = 1;
-    spheres[0].radius = 200;
-    spheres[0].emissionStrength = 1;
-    spheres[1].position[0] = 0;
-    spheres[1].position[1] = 0;
-    spheres[1].position[2] = 3;
-    spheres[1].color[0] = 0.9;
-    spheres[1].color[1] = 0.9;
-    spheres[1].color[2] = 0.9;
-    spheres[1].radius = 1;
-    spheres[1].emissionStrength = 0;
-    spheres[2].position[0] = 0;
-    spheres[2].position[1] = -2;
-    spheres[2].position[2] = 0;
-    spheres[2].color[0] = 0;
-    spheres[2].color[1] = 1;
-    spheres[2].color[2] = 0;
-    spheres[2].radius = 2;
-    spheres[2].emissionStrength = 0;
+    startSpheres[0].position[0] = 0;
+    startSpheres[0].position[1] = 0;
+    startSpheres[0].position[2] = 400;
+    startSpheres[0].color[0] = 0;
+    startSpheres[0].color[1] = 0;
+    startSpheres[0].color[2] = 0;
+    startSpheres[0].emissionColor[0] = 1;
+    startSpheres[0].emissionColor[1] = 1;
+    startSpheres[0].emissionColor[2] = 1;
+    startSpheres[0].radius = 200;
+    startSpheres[0].emissionStrength = 1;
+    startSpheres[0].smoothness = 0;
+    startSpheres[0].specularProbability = 0;
+    startSpheres[1].position[0] = 0;
+    startSpheres[1].position[1] = 0;
+    startSpheres[1].position[2] = 3;
+    startSpheres[1].specularColor[0] = 0.9;
+    startSpheres[1].specularColor[1] = 0.9;
+    startSpheres[1].specularColor[2] = 0.9;
+    startSpheres[1].radius = 1;
+    startSpheres[1].emissionStrength = 0;
+    startSpheres[1].smoothness = 1;
+    startSpheres[1].specularProbability = 1;
+    startSpheres[2].position[0] = 0;
+    startSpheres[2].position[1] = -2;
+    startSpheres[2].position[2] = 0;
+    startSpheres[2].color[0] = 0;
+    startSpheres[2].color[1] = 1;
+    startSpheres[2].color[2] = 0;
+    startSpheres[2].radius = 2;
+    startSpheres[2].emissionStrength = 0;
+    startSpheres[2].smoothness = 0;
+    startSpheres[2].specularProbability = 0;
 
     int frames = 0;
     int file = open("offscreen.data", O_WRONLY | O_CREAT, 0664);
@@ -329,6 +355,7 @@ int main() {
         }
         mat3 rotationMatrix;
         rotationMatrixXYZ(camera.rotation[0], camera.rotation[1], camera.rotation[2], rotationMatrix);
+        memcpy(spheres, startSpheres, sizeof(startSpheres));
         for (int y = 0; y < 480; y++) {
             for (int x = 0; x < 640; x++) {
                 Ray ray;
@@ -361,30 +388,31 @@ int main() {
 
                 float weight = 1.0 / (frames + 1);
 
+                pixbuf[y*640+x][0] = newColor[0];
+                pixbuf[y*640+x][1] = newColor[1];
+                pixbuf[y*640+x][2] = newColor[2];
+
                 pixbuf[y*640+x][0] = oldColor[0]*(1-weight) + newColor[0]*weight;
                 pixbuf[y*640+x][1] = oldColor[1]*(1-weight) + newColor[1]*weight;
                 pixbuf[y*640+x][2] = oldColor[2]*(1-weight) + newColor[2]*weight;
 
-                //pixbuf[y*640+x][0] = newColor[0];
-                //pixbuf[y*640+x][1] = newColor[1];
-                //pixbuf[y*640+x][2] = newColor[2];
-
-                if (frames == 100) {
-                    int framebuffer[640*480];
-                    for (int i = 0; i < 640*480; i++) {
-                        framebuffer[i] = 0xff000000 + ((int)(pixbuf[i][2]*255)<<16) + ((int)(pixbuf[i][1]*255)<<8) + (int)(pixbuf[i][0]*255);
-                    }
-                    write(file, framebuffer, sizeof(framebuffer));
-                    frames = 0;
-                    camera.position[0] += 0.1 * sinf(camera.rotation[1]);
-                    camera.position[2] += 0.1 * cosf(camera.rotation[1]);
-                    videoFrames++;
-                    printf("rendered %d video frames\n", videoFrames);
-                }
-
                 plot(x, y, 0xff000000 + ((int)(pixbuf[y*640+x][0]*255)<<16) + ((int)(pixbuf[y*640+x][1]*255)<<8) + (int)(pixbuf[y*640+x][2]*255));
             }
         }
+
+        if (frames == 100) {
+            int framebuffer[640*480];
+            for (int i = 0; i < 640*480; i++) {
+                framebuffer[i] = 0xff000000 + ((int)(pixbuf[i][2]*255)<<16) + ((int)(pixbuf[i][1]*255)<<8) + (int)(pixbuf[i][0]*255);
+            }
+            write(file, framebuffer, sizeof(framebuffer));
+            frames = 0;
+            startSpheres[1].position[0] = 3 * sinf((float)videoFrames / 10);
+            startSpheres[1].position[2] = 3 * cosf((float)videoFrames / 10);
+            videoFrames++;
+            printf("rendered %d video frames\n", videoFrames);
+        }
+
         updateWindow();
         frames++;
     }
